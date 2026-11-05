@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>تسوق العيلة</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1b1f2a">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="تسوق">
+<style>
+:root{--ink:#1b1f2a;--tag:#ffd43b;--bg:#eef1f5;--card:#fff;--ok:#1f9d55;--warn:#e8890c;--bad:#d93f3f;--mut:#6b7280}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,'Segoe UI',Tahoma,Arial,sans-serif;padding-bottom:90px}
+button,input{font:inherit}
+.wrap{max-width:560px;margin:auto;padding:12px}
+.card{background:var(--card);border-radius:14px;padding:14px;margin-bottom:12px}
+input{width:100%;padding:11px;border:2px solid #d5dae2;border-radius:10px;margin:4px 0;background:#fff}
+input:focus,button:focus-visible{outline:3px solid var(--tag);border-color:var(--ink)}
+.btn{background:var(--ink);color:#fff;border:0;border-radius:10px;padding:11px 16px;font-weight:700;cursor:pointer}
+.btn.y{background:var(--tag);color:var(--ink)}
+.btn.s{padding:6px 10px;font-size:.85rem}
+.hero{background:var(--ink);color:#fff;border-radius:16px;padding:16px;margin-bottom:12px}
+.hero .big{font-size:3rem;font-weight:900;line-height:1;direction:ltr;text-align:right}
+.hero .big small{font-size:1.1rem;color:#aab;font-weight:400}
+.bar{height:14px;background:#3a4052;border-radius:9px;overflow:hidden;margin:10px 0}
+.bar i{display:block;height:100%;background:var(--ok);transition:width .3s}
+.msg{font-weight:700;font-size:1.05rem}
+.row{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px dashed #d5dae2}
+.row:last-child{border:0}
+.row img{width:54px;height:54px;object-fit:cover;border-radius:8px;background:#e5e7eb;flex:none}
+.row .t{flex:1;min-width:0}
+.row .n{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .w{color:var(--mut);font-size:.8rem}
+.price{background:var(--tag);font-weight:900;padding:4px 10px;border-radius:6px;direction:ltr;white-space:nowrap}
+.tabs{position:fixed;bottom:0;left:0;right:0;display:flex;background:#fff;border-top:2px solid var(--ink)}
+.tabs button{flex:1;padding:14px;border:0;background:#fff;font-weight:700;cursor:pointer}
+.tabs button.on{background:var(--tag)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{padding:6px 12px;background:#2c3345;color:#fff;border-radius:20px;font-size:.85rem}
+.found{opacity:.5;text-decoration:line-through}
+.hide{display:none}
+.g2{display:grid;grid-template-columns:2fr 1fr 1fr;gap:6px}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+#err{color:var(--bad);font-weight:700}
+.modal{position:fixed;inset:0;background:#000a;display:flex;align-items:center;justify-content:center;padding:16px;z-index:9}
+.modal .card{width:100%;max-width:420px;margin:0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div id="login" class="card">
+  <h2>🛒 تسوق العيلة</h2>
+  <input id="u" placeholder="اسم المستخدم" autocomplete="username">
+  <input id="p" type="password" placeholder="كلمة السر" autocomplete="current-password">
+  <p id="err"></p>
+  <button class="btn y" onclick="login()">دخول</button>
+</div>
+
+<div id="app" class="hide">
+  <p id="err2" style="color:#d93f3f;font-weight:700"></p>
+  <div class="top"><b id="me"></b><span><button id="inst" class="btn y s hide" onclick="doInstall()">📲 ثبّت</button> <button class="btn s" onclick="sb.auth.signOut()">خروج</button></span></div>
+
+  <div id="shop">
+    <div id="noTrip" class="card hide">
+      <b>شو المبلغ يلي معنا اليوم؟</b>
+      <div class="chips" style="margin:8px 0">
+        <button class="btn y" onclick="newTrip(50)">50$</button>
+        <button class="btn y" onclick="newTrip(100)">100$</button>
+        <button class="btn y" onclick="newTrip(150)">150$</button>
+        <button class="btn" onclick="newTrip(+prompt('المبلغ؟'))">غير هيك</button>
+      </div>
+    </div>
+
+    <div id="tripBox" class="hide">
+      <div class="hero">
+        <div class="big"><span id="tot">0</span><small> / <span id="tgt">0</span>$</small></div>
+        <div class="bar"><i id="fill"></i></div>
+        <div class="msg" id="msg"></div>
+        <div class="chips" id="who" style="margin-top:10px"></div>
+      </div>
+
+      <div class="card">
+        <input id="iname" placeholder="اسم الغرض (اختياري)">
+        <div class="g2">
+          <input id="iprice" type="number" step="0.01" inputmode="decimal" placeholder="السعر $">
+          <input id="iqty" type="number" min="1" value="1" inputmode="numeric" placeholder="العدد">
+          <label class="btn s" style="text-align:center;margin:4px 0;padding-top:12px">📷<input id="iph" type="file" accept="image/*" capture="environment" style="display:none"></label>
+        </div>
+        <button class="btn y" style="width:100%;margin-top:6px" onclick="addItem()">أضف للسلة</button>
+      </div>
+
+      <div class="card" id="list"></div>
+      <button class="btn s" onclick="closeTrip()">خلصنا التسوق – رحلة جديدة</button>
+    </div>
+  </div>
+
+  <div id="needs" class="hide">
+    <div class="card">
+      <b>الناقص بالبيت</b>
+      <div style="display:flex;gap:6px"><input id="nname" placeholder="شو ناقص؟"><button class="btn y" onclick="addNeed()">أضف</button></div>
+    </div>
+    <div class="card" id="nlist"></div>
+    <button class="btn s" onclick="clearFound()">امسح يلي انجابوا</button>
+  </div>
+</div>
+</div>
+
+<div id="modal" class="modal hide"><div class="card">
+  <b>تعديل</b>
+  <input id="en" placeholder="الاسم">
+  <div id="eextra"><div class="g2" style="grid-template-columns:1fr 1fr">
+    <input id="ep" type="number" step="0.01" inputmode="decimal" placeholder="السعر $">
+    <input id="eq" type="number" min="1" inputmode="numeric" placeholder="العدد"></div>
+    <label>صورة جديدة (اختياري)<input id="eph" type="file" accept="image/*"></label></div>
+  <div style="display:flex;gap:8px;margin-top:8px"><button class="btn y" onclick="saveEd()">حفظ</button><button class="btn" onclick="closeEd()">إلغاء</button></div>
+</div></div>
+
+<div class="tabs hide" id="tabs">
+  <button id="t1" class="on" onclick="tab(1)">🛒 السلة</button>
+  <button id="t2" onclick="tab(2)">🏠 الناقص</button>
+</div>
+
+<script src="supabase.js" onerror="document.getElementById('err').textContent='تعذر تحميل ملف supabase.js – تأكد إنه مرفوع بنفس المجلد'"></script>
+<script>
+const SB_URL='https://tlpfldbexghmxnxzofsl.supabase.co', SB_KEY='sb_publishable_1FW1PTlK-08DATlJy7dUwg_KX-0m3n0';
+if(!window.supabase){document.getElementById('err').textContent='تعذر تحميل المكتبة، حدّث الصفحة'}
+const sb=window.supabase&&supabase.createClient(SB_URL,SB_KEY);
+window.onerror=(m)=>{const e=document.getElementById('err');if(e)e.textContent='خطأ: '+m};
+const $=id=>document.getElementById(id);
+let me='',uid='',trip=null,items=[],needs=[];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=n=>(Math.round(n*100)/100).toString();
+
+async function login(){
+  const u=$('u').value.trim(),p=$('p').value;
+  const {error}=await sb.auth.signInWithPassword({email:u.includes('@')?u:u+'@family.app',password:p});
+  $('err').textContent=error?'الاسم أو كلمة السر غلط':'';
+}
+// مهم: لا نستدعي Supabase مباشرة داخل onAuthStateChange (بتعمل تعليق) – نأجلها
+let got=false;
+sb.auth.onAuthStateChange((_e,s)=>{got=true;setTimeout(()=>start(s),0)});
+setTimeout(()=>{if(!got)sb.auth.getSession().then(({data})=>start(data.session))},3000);
+
+let started=false;
+async function start(s){
+  const on=!!s;
+  $('login').classList.toggle('hide',on);
+  $('app').classList.toggle('hide',!on);
+  $('tabs').classList.toggle('hide',!on);
+  if(!on){started=false;uid='';return}
+  if(uid===s.user.id&&started)return;
+  me=s.user.email.split('@')[0];uid=s.user.id;$('me').textContent='👤 '+me;
+  await load();
+  if(!started){started=true;let tm;sb.channel('fam').on('postgres_changes',{event:'*',schema:'public'},()=>{clearTimeout(tm);tm=setTimeout(load,300)}).subscribe()}
+}
+
+async function load(){
+  try{
+    const t=await sb.from('trips').select('*').eq('status','open').order('created_at',{ascending:false}).limit(1);
+    if(t.error)throw t.error;
+    trip=t.data&&t.data[0]||null;
+    if(trip){const r=await sb.from('items').select('*').eq('trip_id',trip.id).order('created_at',{ascending:false});if(r.error)throw r.error;items=r.data||[]}else items=[];
+    const n=await sb.from('needs').select('*').order('created_at',{ascending:false});if(n.error)throw n.error;
+    needs=n.data||[];
+    $('err2').textContent='';
+    render();
+  }catch(e){$('err2').textContent='خطأ: '+(e.message||e)}
+}
+
+function render(){
+  $('noTrip').classList.toggle('hide',!!trip);
+  $('tripBox').classList.toggle('hide',!trip);
+  if(trip){
+    const tot=items.reduce((a,i)=>a+i.price*i.qty,0),left=trip.target-tot;
+    $('tot').textContent=money(tot);$('tgt').textContent=trip.target;
+    const f=$('fill');f.style.width=Math.min(100,tot/trip.target*100)+'%';
+    f.style.background=left<0?'var(--bad)':left<trip.target*.15?'var(--warn)':'var(--ok)';
+    $('msg').textContent=left<0?`⚠️ تعدينا بـ ${money(-left)}$ – بتنزل من جيبتنا`:left===0?'✅ ظبطت بالمللي':`باقي ${money(left)}$`;
+    const by={};items.forEach(i=>by[i.added_by]=(by[i.added_by]||0)+i.price*i.qty);
+    $('who').innerHTML=Object.entries(by).map(([k,v])=>`<span class="chip">${esc(k)}: ${money(v)}$</span>`).join('');
+    $('list').innerHTML=items.length?items.map(i=>`<div class="row">
+      ${i.image_url?`<img src="${esc(i.image_url)}" alt="">`:'<img alt="">'}
+      <div class="t"><div class="n">${esc(i.name||'غرض')}${i.qty>1?' ×'+i.qty:''}</div><div class="w">${esc(i.added_by)}</div></div>
+      <span class="price">${money(i.price*i.qty)}$</span>
+      <button class="btn s" aria-label="تعديل" onclick="openEd('i','${i.id}')">✎</button><button class="btn s" aria-label="حذف" onclick="delItem('${i.id}')">✕</button></div>`).join(''):'<p>السلة فاضية. أضف أول غرض.</p>';
+  }
+  $('nlist').innerHTML=needs.length?needs.map(n=>`<div class="row">
+    <input type="checkbox" style="width:26px;height:26px" ${n.found?'checked':''} onchange="toggleNeed('${n.id}',this.checked)">
+    <div class="t ${n.found?'found':''}"><div class="n">${esc(n.name)}</div>
+    <div class="w">${n.found?'انجاب: '+esc(n.found_by):'طلبه: '+esc(n.added_by)}</div></div>
+    <button class="btn s" aria-label="تعديل" onclick="openEd('n','${n.id}')">✎</button><button class="btn s" aria-label="حذف" onclick="delNeed('${n.id}')">✕</button></div>`).join(''):'<p>ما في شي ناقص 🎉</p>';
+}
+
+function tab(n){
+  $('shop').classList.toggle('hide',n!==1);$('needs').classList.toggle('hide',n!==2);
+  $('t1').classList.toggle('on',n===1);$('t2').classList.toggle('on',n===2);
+}
+
+async function newTrip(v){
+  if(!v||v<=0)return;
+  await sb.from('trips').insert({target:v,created_by:me});load();
+}
+async function closeTrip(){
+  if(!confirm('نسكر هالتسوق ونبدأ رحلة جديدة؟'))return;
+  await sb.from('trips').update({status:'closed'}).eq('id',trip.id);load();
+}
+
+function shrink(file){
+  return new Promise(res=>{
+    const img=new Image();img.onload=()=>{
+      const k=Math.min(1,600/Math.max(img.width,img.height)),c=document.createElement('canvas');
+      c.width=img.width*k;c.height=img.height*k;c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+      c.toBlob(res,'image/jpeg',.75)};img.src=URL.createObjectURL(file)});
+}
+async function upload(f){
+  const b=await shrink(f),path=`${uid}/${Date.now()}.jpg`;
+  const up=await sb.storage.from('pics').upload(path,b,{contentType:'image/jpeg'});
+  if(up.error){alert('فشل رفع الصورة: '+up.error.message);return null}
+  return sb.storage.from('pics').getPublicUrl(path).data.publicUrl;
+}
+let ed=null;
+function openEd(kind,id){
+  const o=(kind==='i'?items:needs).find(x=>x.id===id);if(!o)return;
+  ed={kind,id};$('en').value=o.name||'';
+  $('eextra').classList.toggle('hide',kind!=='i');
+  if(kind==='i'){$('ep').value=o.price;$('eq').value=o.qty;$('eph').value=''}
+  $('modal').classList.remove('hide');
+}
+function closeEd(){$('modal').classList.add('hide');ed=null}
+async function saveEd(){
+  if(!ed)return;const name=$('en').value.trim();let r;
+  if(ed.kind==='i'){
+    const price=parseFloat($('ep').value);if(!(price>=0))return alert('اكتب السعر');
+    const upd={name,price,qty:parseInt($('eq').value)||1};
+    const f=$('eph').files[0];if(f){const u=await upload(f);if(u)upd.image_url=u}
+    r=await sb.from('items').update(upd).eq('id',ed.id);
+  }else{if(!name)return;r=await sb.from('needs').update({name}).eq('id',ed.id)}
+  if(r.error)return alert('فشل الحفظ: '+r.error.message);
+  closeEd();load();
+}
+async function delNeed(id){await sb.from('needs').delete().eq('id',id);load()}
+let dip=null;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();dip=e;$('inst').classList.remove('hide')});
+function doInstall(){if(dip){dip.prompt();dip=null;$('inst').classList.add('hide')}}
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+async function addItem(){
+  const price=parseFloat($('iprice').value);
+  if(!(price>=0))return alert('اكتب السعر');
+  let url=null;const f=$('iph').files[0];
+  if(f)url=await upload(f);
+  const ins=await sb.from('items').insert({trip_id:trip.id,name:$('iname').value.trim(),price,qty:parseInt($('iqty').value)||1,image_url:url,added_by:me,user_id:uid});
+  if(ins.error)return alert('فشل الإضافة: '+ins.error.message);
+  $('iname').value='';$('iprice').value='';$('iqty').value=1;$('iph').value='';load();
+}
+async function delItem(id){await sb.from('items').delete().eq('id',id);load()}
+
+async function addNeed(){
+  const n=$('nname').value.trim();if(!n)return;
+  await sb.from('needs').insert({name:n,added_by:me});$('nname').value='';load();
+}
+async function toggleNeed(id,v){
+  await sb.from('needs').update({found:v,found_by:v?me:null}).eq('id',id);load();
+}
+async function clearFound(){await sb.from('needs').delete().eq('found',true);load()}
+</script>
+</body>
+</html>
