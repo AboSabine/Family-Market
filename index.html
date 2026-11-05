@@ -62,7 +62,7 @@ input:focus,button:focus-visible{outline:3px solid var(--tag);border-color:var(-
 
 <div id="app" class="hide">
   <p id="err2" style="color:#d93f3f;font-weight:700"></p>
-  <div class="top"><b id="me"></b><span><button id="inst" class="btn y s hide" onclick="doInstall()">📲 ثبّت</button> <button class="btn s" onclick="sb.auth.signOut()">خروج</button></span></div>
+  <div class="top"><b id="me"></b><span><button id="rf" class="btn s" aria-label="تحديث" onclick="refresh()">🔄</button> <button id="inst" class="btn y s hide" onclick="doInstall()">📲 ثبّت</button> <button class="btn s" onclick="sb.auth.signOut()">خروج</button></span></div>
 
   <div id="shop">
     <div id="noTrip" class="card hide">
@@ -237,9 +237,10 @@ async function saveEd(){
     const price=parseFloat($('ep').value);if(!(price>=0))return alert('اكتب السعر');
     const upd={name,price,qty:parseInt($('eq').value)||1};
     const f=$('eph').files[0];if(f){const u=await upload(f);if(u)upd.image_url=u}
-    r=await sb.from('items').update(upd).eq('id',ed.id);
-  }else{if(!name)return;r=await sb.from('needs').update({name}).eq('id',ed.id)}
+    r=await sb.from('items').update(upd).eq('id',ed.id).select();
+  }else{if(!name)return;r=await sb.from('needs').update({name}).eq('id',ed.id).select()}
   if(r.error)return alert('فشل الحفظ: '+r.error.message);
+  if(!r.data||!r.data.length)return alert('التعديل ما انحفظ: السبب غالباً إنك ما شغّلت ملف supabase-update.sql بـ Supabase (صلاحية التعديل ناقصة)');
   closeEd();load();
 }
 async function delNeed(id){await sb.from('needs').delete().eq('id',id);load()}
@@ -256,7 +257,16 @@ async function addItem(){
   if(ins.error)return alert('فشل الإضافة: '+ins.error.message);
   $('iname').value='';$('iprice').value='';$('iqty').value=1;$('iph').value='';load();
 }
-async function delItem(id){await sb.from('items').delete().eq('id',id);load()}
+async function delItem(id){
+  const r=await sb.from('items').delete().eq('id',id).select();
+  if(r.error)alert('فشل الحذف: '+r.error.message);
+  else if(!r.data.length)alert('الحذف ما انعمل: شغّل ملف supabase-update.sql بـ Supabase');
+  load();
+}
+async function refresh(){
+  const b=$('rf');b.disabled=true;b.textContent='⏳';
+  await load();b.disabled=false;b.textContent='🔄';
+}
 
 async function addNeed(){
   const n=$('nname').value.trim();if(!n)return;
