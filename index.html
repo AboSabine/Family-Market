@@ -273,7 +273,17 @@ async function addNeed(){
   await sb.from('needs').insert({name:n,added_by:me});$('nname').value='';load();
 }
 async function toggleNeed(id,v){
-  await sb.from('needs').update({found:v,found_by:v?me:null}).eq('id',id);load();
+  const n=needs.find(x=>x.id===id),name=n?n.name:'';
+  await sb.from('needs').update({found:v,found_by:v?me:null}).eq('id',id);
+  await load();
+  if(v&&confirm('ضيف "'+name+'" على السلة؟')){
+    tab(1);
+    if(!trip)return alert('ما في رحلة تسوق مفتوحة. اختار المبلغ أول، وبعدين ضيفه.');
+    $('iname').value=name;
+    $('iqty').value=1;
+    $('iprice').focus();
+    $('iprice').scrollIntoView({behavior:'smooth',block:'center'});
+  }
 }
 async function clearFound(){await sb.from('needs').delete().eq('found',true);load()}
 </script>
