@@ -106,6 +106,14 @@ input:focus,button:focus-visible{outline:3px solid var(--tag);border-color:var(-
     <div class="card" id="nlist"></div>
     <button class="btn s" onclick="clearFound()">امسح يلي انجابوا</button>
   </div>
+
+  <div id="arch" class="hide">
+    <div class="card">
+      <input id="asr" type="search" placeholder="🔍 دوّر على صنف..." oninput="renderArch()">
+      <div class="w" id="asum" style="margin-top:4px"></div>
+    </div>
+    <div id="alist"></div>
+  </div>
 </div>
 </div>
 
@@ -118,7 +126,8 @@ input:focus,button:focus-visible{outline:3px solid var(--tag);border-color:var(-
     <label>صورة جديدة (اختياري)<input id="eph" type="file" accept="image/*"></label></div>
   <div style="display:flex;gap:8px;margin-top:8px"><button class="btn y" onclick="saveEd()">حفظ</button><button class="btn" onclick="closeEd()">إلغاء</button></div>
 </div></div>
-  <div id="tmodal" class="modal hide"><div class="card">
+
+<div id="tmodal" class="modal hide"><div class="card">
   <b>شو المبلغ يلي معنا؟</b>
   <div class="chips" style="margin:8px 0">
     <button class="btn y" onclick="setTarget(50)">50$</button>
@@ -135,6 +144,7 @@ input:focus,button:focus-visible{outline:3px solid var(--tag);border-color:var(-
 <div class="tabs hide" id="tabs">
   <button id="t1" class="on" onclick="tab(1)">🛒 السلة</button>
   <button id="t2" onclick="tab(2)">🏠 الناقص</button>
+  <button id="t3" onclick="tab(3)">📦 الأرشيف</button>
 </div>
 
 <script src="supabase.js" onerror="document.getElementById('err').textContent='تعذر تحميل ملف supabase.js – تأكد إنه مرفوع بنفس المجلد'"></script>
@@ -209,15 +219,20 @@ function render(){
 }
 
 function tab(n){
-  $('shop').classList.toggle('hide',n!==1);$('needs').classList.toggle('hide',n!==2);
-  $('t1').classList.toggle('on',n===1);$('t2').classList.toggle('on',n===2);
+  $('shop').classList.toggle('hide',n!==1);
+  $('needs').classList.toggle('hide',n!==2);
+  $('arch').classList.toggle('hide',n!==3);
+  ['t1','t2','t3'].forEach((k,i)=>$(k).classList.toggle('on',n===i+1));
+  if(n===3)loadArch();
 }
 
 async function newTrip(v){
   if(!v||v<=0)return;
   await sb.from('trips').insert({target:v,created_by:me});load();
 }
-  function openTarget(){
+
+/* ===== تغيير المبلغ ===== */
+function openTarget(){
   if(!trip)return;
   $('tcustom').value='';
   $('tmodal').classList.remove('hide');
@@ -230,9 +245,101 @@ async function setTarget(v){
   if(!r.data||!r.data.length)return alert('التعديل ما انحفظ: صلاحية التعديل على جدول trips ناقصة');
   closeTarget();load();
 }
+
+/* ===== الأرشيف ===== */
+let arch={trips:[],items:[]};
+const dt=d=>new Date(d).toLocaleDateString('en-GB');
+
+async function loadArch(){
+  $('alist').innerHTML='<div class="card">⏳ جاري التحميل...</div>';
+  try{
+    const t=await sb.from('trips').select('*').eq('status','closed').order('created_at',{ascending:false});
+    if(t.error)throw t.error;
+    let all=[],from=0;
+    while(true){
+      const r=await sb.from('items').select('*').order('created_at',{ascending:false}).range(from,from+999);
+      if(r.error)throw r.error;
+      all=all.concat(r.data);
+      if(r.data.length<1000)break;
+      from+=1000;
+    }
+    const ids=new Set(t.data.map(x=>x.id));
+    arch.trips=t.data;
+    arch.items=all.filter(i=>ids.has(i.trip_id));
+    renderArch();
+  }catch(e){$('alist').innerHTML='<div class="card" style="color:#d93f3f;font-weight:700">خطأ: '+esc(e.message||e)+'</div>'}
+}
+
+function renderArch(){
+  const q=$('asr').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if(q.length){
+    const m=arch.items.filter(i=>{const n=(i.name||'').toLowerCase();return q.every(w=>n.includes(w))});
+    $('asum').textContent=m.length+' نتيجة';
+    $('alist').innerHTML=m.length?'<div class="card">'+m.map(i=>`<div class="row">
+      ${i.image_url?`<img src="${esc(i.image_url)}" alt="">`:'<img alt="">'}
+      <div class="t"><div class="n">${esc(i.name)}${i.qty>1?' ×'+i.qty:''}</div>
+      <div class="w">${dt(i.created_at)} · ${esc(i.added_by)}</div></div>
+      <span class="price">${money(i.price)}$${i.qty>1?' /قطعة':''}</span></div>`).join('')+'</div>'
+      :'<div class="card">ما لقيت شي</div>';
+    return;
+  }
+  $('asum').textContent=arch.trips.length+' طلبية';
+  $('alist').innerHTML=arch.trips.length?arch.trips.map(t=>{
+    const its=arch.items.filter(i=>i.trip_id===t.id),tot=its.reduce((a,i)=>a+i.price*i.qty,0);
+    return `<details class="card"><summary style="cursor:pointer;font-weight:700">${dt(t.created_at)} — ${money(tot)}$ من ${esc(t.target)}$ (${its.length} غرض)</summary>
+    ${its.map(i=>`<div class="row"><div class="t"><div class="n">${esc(i.name||'غرض')}${i.qty>1?' ×'+i.qty:''}</div><div class="w">${esc(i.added_by)}</div></div><span class="price">${money(i.price*i.qty)}$</span></div>`).join('')||'<p>فاضية</p>'}
+    ${its.length?`<button class="btn y s" style="width:100%;margin-top:8px" onclick="copyArch('${t.id}',this)">📋 نسخ الفاتورة</button>`:''}
+    </details>`}).join(''):'<div class="card">ما في طلبيات مؤرشفة بعد</div>';
+}
+
+/* ===== الفاتورة والنسخ ===== */
+function buildInvoice(tr,its,d){
+  const list=its.slice().reverse();
+  const tot=its.reduce((a,i)=>a+i.price*i.qty,0),left=tr.target-tot;
+  const by={};its.forEach(i=>by[i.added_by]=(by[i.added_by]||0)+i.price*i.qty);
+  const line='━━━━━━━━━━━━';
+  return [
+    '🛒 *فاتورة التسوق*',
+    '📅 '+new Date(d).toLocaleDateString('en-GB'),
+    line,
+    ...list.map((i,k)=>`${k+1}. ${i.name||'غرض'}${i.qty>1?' ×'+i.qty:''} = ${money(i.price*i.qty)}$`),
+    line,
+    `💰 *المجموع: ${money(tot)}$*`,
+    `🎯 المبلغ: ${money(tr.target)}$`,
+    left<0?`⚠️ تعدينا بـ ${money(-left)}$`:`✅ باقي: ${money(left)}$`,
+    '',
+    '👤 *حسب الشخص:*',
+    ...Object.entries(by).map(([k,v])=>`• ${k}: ${money(v)}$`)
+  ].join('\n');
+}
+
+async function copyText(t){
+  try{await navigator.clipboard.writeText(t);return true}catch(e){}
+  try{
+    const a=document.createElement('textarea');a.value=t;a.style.position='fixed';a.style.opacity='0';
+    document.body.appendChild(a);a.select();
+    const ok=document.execCommand('copy');a.remove();return ok;
+  }catch(e){return false}
+}
+
+async function copyArch(id,btn){
+  const t=arch.trips.find(x=>x.id===id);if(!t)return;
+  const its=arch.items.filter(i=>i.trip_id===id);
+  const ok=await copyText(buildInvoice(t,its,t.created_at));
+  const old=btn.textContent;
+  btn.textContent=ok?'✅ تم النسخ':'❌ ما اننسخ';
+  setTimeout(()=>btn.textContent=old,2000);
+}
+
 async function closeTrip(){
   if(!confirm('نسكر هالتسوق ونبدأ رحلة جديدة؟'))return;
-  await sb.from('trips').update({status:'closed'}).eq('id',trip.id);load();
+  let copied=false;
+  if(items.length)copied=await copyText(buildInvoice(trip,items,new Date()));
+  const r=await sb.from('trips').update({status:'closed'}).eq('id',trip.id).select();
+  if(r.error)return alert('فشل الإغلاق: '+r.error.message);
+  await load();
+  if(copied)alert('✅ انحفظت بالأرشيف ونسخت الفاتورة.\nافتح الواتساب والصق بمجموعة المصاريف.');
+  else if(items.length)alert('انحفظت بالأرشيف، بس ما قدرت أنسخ الفاتورة تلقائياً.');
 }
 
 function shrink(file){
