@@ -47,9 +47,15 @@ input:focus,button:focus-visible{outline:3px solid var(--tag);border-color:var(-
 #err{color:var(--bad);font-weight:700}
 .modal{position:fixed;inset:0;background:#000a;display:flex;align-items:center;justify-content:center;padding:16px;z-index:9}
 .modal .card{width:100%;max-width:420px;margin:0}
+#toasts{position:fixed;top:8px;left:8px;right:8px;max-width:540px;margin:auto;z-index:99;display:flex;flex-direction:column;gap:6px;max-height:60vh;overflow:auto}
+.toast{display:flex;align-items:center;gap:10px;background:var(--ink);color:#fff;padding:10px 12px;border-radius:12px;border:2px solid var(--tag);box-shadow:0 4px 14px #0005}
+.toast .tx{flex:1;font-weight:700}
+.toast .tm{display:block;font-weight:400;font-size:.75rem;color:#aab}
+.toast button{background:var(--tag);color:var(--ink);border:0;border-radius:8px;width:32px;height:32px;font-weight:900;cursor:pointer;flex:none}
 </style>
 </head>
 <body>
+<div id="toasts"></div>
 <div class="wrap">
 
 <div id="login" class="card">
@@ -178,7 +184,15 @@ async function start(s){
   if(uid===s.user.id&&started)return;
   me=s.user.email.split('@')[0];uid=s.user.id;$('me').textContent='👤 '+me;
   await load();
-  if(!started){started=true;let tm;sb.channel('fam').on('postgres_changes',{event:'*',schema:'public'},()=>{clearTimeout(tm);tm=setTimeout(load,300)}).subscribe()}
+  if(!started){
+    started=true;
+    let tm;
+    sb.channel('fam').on('postgres_changes',{event:'*',schema:'public'},()=>{clearTimeout(tm);tm=setTimeout(load,300)}).subscribe();
+    sb.channel('act').on('postgres_changes',{event:'INSERT',schema:'public',table:'activity'},p=>{
+      if(p.new.who!==me){toast(p.new.id,p.new.msg,p.new.created_at);if(navigator.vibrate)navigator.vibrate(100)}
+    }).subscribe();
+    catchUp();
+  }
 }
 
 async function load(){
@@ -230,6 +244,29 @@ async function newTrip(v){
   if(!v||v<=0)return;
   await sb.from('trips').insert({target:v,created_by:me});load();
 }
+
+/* ===== الإشعارات داخل التطبيق ===== */
+const seenN=new Set();
+function dismissedList(){try{return JSON.parse(localStorage.getItem('dis')||'[]')}catch(e){return[]}}
+function saveDismissed(a){try{localStorage.setItem('dis',JSON.stringify(a.slice(-200)))}catch(e){}}
+function toast(id,text,when){
+  if(seenN.has(id))return;seenN.add(id);
+  const tm=when?new Date(when).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'';
+  const d=document.createElement('div');d.className='toast';
+  d.innerHTML=`<div class="tx">${esc(text)}<span class="tm">${tm}</span></div><button aria-label="إغلاق">✕</button>`;
+  d.querySelector('button').onclick=()=>{d.remove();const a=dismissedList();a.push(id);saveDismissed(a)};
+  $('toasts').appendChild(d);
+}
+async function catchUp(){
+  try{
+    const since=new Date(Date.now()-864e5).toISOString();
+    const r=await sb.from('activity').select('*').gt('created_at',since).neq('who',me).order('created_at',{ascending:true});
+    if(r.error)return;
+    const d=dismissedList();
+    r.data.forEach(a=>{if(!d.includes(a.id))toast(a.id,a.msg,a.created_at)});
+  }catch(e){}
+}
+async function log(msg){try{await sb.from('activity').insert({who:me,msg})}catch(e){}}
 
 /* ===== تغيير المبلغ ===== */
 function openTarget(){
@@ -335,13 +372,16 @@ async function closeTrip(){
   if(!confirm('نسكر هالتسوق ونبدأ رحلة جديدة؟'))return;
   let copied=false;
   if(items.length)copied=await copyText(buildInvoice(trip,items,new Date()));
+  const n=items.length,tot=items.reduce((a,i)=>a+i.price*i.qty,0);
   const r=await sb.from('trips').update({status:'closed'}).eq('id',trip.id).select();
   if(r.error)return alert('فشل الإغلاق: '+r.error.message);
+  log(`✅ ${me} خلّص التسوق (${n} غرض، ${money(tot)}$)`);
   await load();
   if(copied)alert('✅ انحفظت بالأرشيف ونسخت الفاتورة.\nافتح الواتساب والصق بمجموعة المصاريف.');
   else if(items.length)alert('انحفظت بالأرشيف، بس ما قدرت أنسخ الفاتورة تلقائياً.');
 }
 
+/* ===== الصور والتعديل ===== */
 function shrink(file){
   return new Promise(res=>{
     const img=new Image();img.onload=()=>{
@@ -376,24 +416,30 @@ async function saveEd(){
   if(!r.data||!r.data.length)return alert('التعديل ما انحفظ: السبب غالباً إنك ما شغّلت ملف supabase-update.sql بـ Supabase (صلاحية التعديل ناقصة)');
   closeEd();load();
 }
-async function delNeed(id){await sb.from('needs').delete().eq('id',id);load()}
+
 let dip=null;
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();dip=e;$('inst').classList.remove('hide')});
 function doInstall(){if(dip){dip.prompt();dip=null;$('inst').classList.add('hide')}}
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+/* ===== السلة ===== */
 async function addItem(){
   const price=parseFloat($('iprice').value);
   if(!(price>=0))return alert('اكتب السعر');
   let url=null;const f=$('iph').files[0];
   if(f)url=await upload(f);
-  const ins=await sb.from('items').insert({trip_id:trip.id,name:$('iname').value.trim(),price,qty:parseInt($('iqty').value)||1,image_url:url,added_by:me,user_id:uid});
+  const nm=$('iname').value.trim(),qty=parseInt($('iqty').value)||1;
+  const ins=await sb.from('items').insert({trip_id:trip.id,name:nm,price,qty,image_url:url,added_by:me,user_id:uid});
   if(ins.error)return alert('فشل الإضافة: '+ins.error.message);
+  log(`🛒 ${me} أضاف ${nm||'غرض'}${qty>1?' ×'+qty:''} (${money(price*qty)}$) للسلة`);
   $('iname').value='';$('iprice').value='';$('iqty').value=1;$('iph').value='';load();
 }
 async function delItem(id){
+  const o=items.find(x=>x.id===id);
   const r=await sb.from('items').delete().eq('id',id).select();
   if(r.error)alert('فشل الحذف: '+r.error.message);
   else if(!r.data.length)alert('الحذف ما انعمل: شغّل ملف supabase-update.sql بـ Supabase');
+  else log(`🗑️ ${me} حذف ${(o&&o.name)||'غرض'} من السلة`);
   load();
 }
 async function refresh(){
@@ -401,13 +447,23 @@ async function refresh(){
   await load();b.disabled=false;b.textContent='🔄';
 }
 
+/* ===== الناقص ===== */
 async function addNeed(){
   const n=$('nname').value.trim();if(!n)return;
-  await sb.from('needs').insert({name:n,added_by:me});$('nname').value='';load();
+  const r=await sb.from('needs').insert({name:n,added_by:me});
+  if(!r.error)log(`🏠 ${me} ضاف "${n}" للناقص`);
+  $('nname').value='';load();
+}
+async function delNeed(id){
+  const o=needs.find(x=>x.id===id);
+  const r=await sb.from('needs').delete().eq('id',id);
+  if(!r.error)log(`🗑️ ${me} حذف "${(o&&o.name)||'غرض'}" من الناقص`);
+  load();
 }
 async function toggleNeed(id,v){
   const n=needs.find(x=>x.id===id),name=n?n.name:'';
-  await sb.from('needs').update({found:v,found_by:v?me:null}).eq('id',id);
+  const r=await sb.from('needs').update({found:v,found_by:v?me:null}).eq('id',id);
+  if(!r.error&&v)log(`✅ ${me} جاب "${name}"`);
   await load();
   if(v&&confirm('ضيف "'+name+'" على السلة؟')){
     tab(1);
@@ -418,7 +474,12 @@ async function toggleNeed(id,v){
     $('iprice').scrollIntoView({behavior:'smooth',block:'center'});
   }
 }
-async function clearFound(){await sb.from('needs').delete().eq('found',true);load()}
+async function clearFound(){
+  const r=await sb.from('needs').delete().eq('found',true);
+  if(!r.error)log(`🧹 ${me} مسح الأغراض يلي انجابوا من الناقص`);
+  load();
+}
 </script>
 </body>
 </html>
+
